@@ -710,6 +710,16 @@ class User(db.Model, ModelMixin, UserMixin):
         # can have duplicate where a "root" user has a domain that's also listed in SL domains
         return list(set(domains))
 
+    def should_show_app_page(self) -> bool:
+        """whether to show the app page"""
+        return (
+            # when user has used the "Sign in with SL" button before
+            ClientUser.query.filter(ClientUser.user_id == self.id).count()
+            # or when user has created an app
+            + Client.query.filter(Client.user_id == self.id).count()
+            > 0
+        )
+
     def __repr__(self):
         return f"<User {self.id} {self.name} {self.email}>"
 
@@ -838,6 +848,10 @@ class Client(db.Model, ModelMixin):
     user_id = db.Column(db.ForeignKey(User.id, ondelete="cascade"), nullable=False)
     icon_id = db.Column(db.ForeignKey(File.id), nullable=True)
 
+    # an app needs to be approved by SimpleLogin team
+    approved = db.Column(db.Boolean, nullable=False, default=False, server_default="0")
+    description = db.Column(db.Text, nullable=True)
+
     icon = db.relationship(File)
 
     def nb_user(self):
@@ -897,6 +911,8 @@ class AuthorizationCode(db.Model, ModelMixin):
 
     # what is the input response_type, e.g. "code", "code,id_token", ...
     response_type = db.Column(db.String(128))
+
+    nonce = db.Column(db.Text, nullable=True, default=None, server_default=text("NULL"))
 
     user = db.relationship(User, lazy=False)
     client = db.relationship(Client, lazy=False)

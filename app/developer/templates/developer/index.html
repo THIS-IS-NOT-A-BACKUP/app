@@ -20,10 +20,19 @@
   {% endif %}
 
   <div class="row">
-    <div class="col-4">
-      <a href="{{ url_for('developer.new_client') }}" class="btn btn-success">Create new app</a>
+    <div class="col">
+      <div class="btn-group" role="group" aria-label="Basic example">
+        <a href="{{ url_for('developer.new_client') }}" class="btn btn-primary">
+          Create new website/app
+        </a>
+        <a href="https://docs.simplelogin.io" target="_blank" class="ml-2 btn btn-secondary">
+          Docs <i class="fe fe-external-link"></i>
+        </a>
+      </div>
     </div>
   </div>
+
+
 
   <div class="row row-cards row-deck mt-4">
     {% for client in clients %}
@@ -32,12 +41,21 @@
           <div class="card-header">
             <div class="card-title d-flex align-items-center">
               {% if client.icon_id %}
-                <span class="avatar" style="background-image: url({{ client.icon.get_url() }})"></span>
+                <span class="avatar mr-2" style="background-image: url({{ client.icon.get_url() }})"></span>
               {% endif %}
               <span class="">
                 <a href="{{ url_for('developer.client_detail', client_id=client.id) }}">
                   {{ client.name }}
                 </a>
+                {% if client.approved %}
+                  <span class="cursor" data-toggle="tooltip" data-original-title="Approved">✅</span>
+                {% else %}
+                  <span class="cursor" data-toggle="tooltip" data-original-title="In Dev mode">
+                    <a href="{{ url_for('developer.client_detail', client_id=client.id) }}"
+                      class="text-decoration-none">🚫
+                    </a>
+                  </span>
+                {% endif %}
               </span>
             </div>
 
@@ -50,7 +68,6 @@
           </div>
 
           <div class="card-body">
-            App ID: <em>{{ client.oauth_client_id }} </em><br>
             <span class="h1 m-0">{{ client.nb_user() }}</span> Users <br>
             Created {{ client.created_at |dt }} <br>
             {% if client.last_user_login() %}

@@ -78,8 +78,9 @@ def authorize():
 
     # check if redirect_uri is valid
     # allow localhost by default
+    # allow any redirect_uri if the app isn't approved
     hostname, scheme = get_host_name_and_scheme(redirect_uri)
-    if hostname != "localhost" and hostname != "127.0.0.1":
+    if hostname != "localhost" and hostname != "127.0.0.1" and client.approved:
         # support custom scheme for mobile app
         if scheme == "http":
             final_redirect_uri = f"{redirect_uri}?error=http_not_allowed"
@@ -263,7 +264,6 @@ def authorize():
 
         auth_code = None
         if ResponseType.CODE in response_types:
-            # Create authorization code
             auth_code = AuthorizationCode.create(
                 client_id=client.id,
                 user_id=current_user.id,
@@ -271,8 +271,8 @@ def authorize():
                 scope=scope,
                 redirect_uri=redirect_uri,
                 response_type=response_types_to_str(response_types),
+                nonce=nonce,
             )
-            db.session.add(auth_code)
             redirect_args["code"] = auth_code.code
 
         oauth_token = None
