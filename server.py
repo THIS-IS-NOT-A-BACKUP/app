@@ -34,6 +34,7 @@ from app.admin_model import (
     MailboxAdmin,
     LifetimeCouponAdmin,
     ManualSubscriptionAdmin,
+    ClientAdmin,
 )
 from app.api.base import api_bp
 from app.auth.base import auth_bp
@@ -359,15 +360,15 @@ def fake_data():
     client1 = Client.create_new(name="Demo", user_id=user.id)
     client1.oauth_client_id = "client-id"
     client1.oauth_client_secret = "client-secret"
-    client1.published = True
     db.session.commit()
 
-    RedirectUri.create(client_id=client1.id, uri="https://ab.com")
+    RedirectUri.create(
+        client_id=client1.id, uri="https://your-website.com/oauth-callback"
+    )
 
     client2 = Client.create_new(name="Demo 2", user_id=user.id)
     client2.oauth_client_id = "client-id2"
     client2.oauth_client_secret = "client-secret2"
-    client2.published = True
     db.session.commit()
 
     ClientUser.create(user_id=user.id, client_id=client1.id, name="Fake Name")
@@ -830,6 +831,7 @@ def init_admin(app):
     admin.add_view(EmailLogAdmin(EmailLog, db.session))
     admin.add_view(LifetimeCouponAdmin(LifetimeCoupon, db.session))
     admin.add_view(ManualSubscriptionAdmin(ManualSubscription, db.session))
+    admin.add_view(ClientAdmin(Client, db.session))
 
 
 def setup_do_not_track(app):
