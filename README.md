@@ -402,8 +402,7 @@ EMAIL_SERVERS_WITH_PRIORITY=[(10, "app.mydomain.com.")]
 # this option doesn't make sense in self-hosted. Set this variable to disable this option.
 DISABLE_ALIAS_SUFFIX=1
 
-# the DKIM public/private keys used to compute DKIM-Signature
-DKIM_PUBLIC_KEY_PATH=/dkim.pub.key
+# the DKIM private key used to compute DKIM-Signature
 DKIM_PRIVATE_KEY_PATH=/dkim.key
 
 # DB Connection
@@ -428,7 +427,7 @@ sudo docker run --rm \
     -v $(pwd)/dkim.pub.key:/dkim.pub.key \
     -v $(pwd)/simplelogin.env:/code/.env \
     --network="sl-network" \
-    simplelogin/app:3.3.0 flask db upgrade
+    simplelogin/app:3.4.0 flask db upgrade
 ```
 
 This command could take a while to download the `simplelogin/app` docker image.
@@ -443,7 +442,7 @@ sudo docker run --rm \
     -v $(pwd)/dkim.key:/dkim.key \
     -v $(pwd)/dkim.pub.key:/dkim.pub.key \
     --network="sl-network" \
-    simplelogin/app:3.3.0 python init_app.py
+    simplelogin/app:3.4.0 python init_app.py
 ```
 
 Now, it's time to run the `webapp` container!
@@ -459,7 +458,7 @@ sudo docker run -d \
     -p 7777:7777 \
     --restart always \
     --network="sl-network" \
-    simplelogin/app:3.3.0
+    simplelogin/app:3.4.0
 ```
 
 Next run the `email handler`
@@ -475,7 +474,7 @@ sudo docker run -d \
     -p 20381:20381 \
     --restart always \
     --network="sl-network" \
-    simplelogin/app:3.3.0 python email_handler.py
+    simplelogin/app:3.4.0 python email_handler.py
 ```
 
 ### Nginx
