@@ -5,15 +5,11 @@ from IPython import embed
 from sqlalchemy_utils import create_database, database_exists, drop_database
 
 from app.config import DB_URI
-from app.email_utils import send_email, render, get_email_domain_part
-from app.log import LOG
+from app.email_utils import send_email, render
 from app.extensions import db
+from app.log import LOG
 from app.models import (
     User,
-    DeletedAlias,
-    SLDomain,
-    CustomDomain,
-    DomainDeletedAlias,
     Mailbox,
 )
 from job_runner import (
@@ -99,27 +95,6 @@ def send_mobile_newsletter():
                 # sleep every 5 sends to avoid hitting email limits
                 LOG.d("Sleep 1s")
                 sleep(1)
-
-
-def migrate_domain_trash():
-    """Move aliases from global trash to domain trash if applicable"""
-    for deleted_alias in DeletedAlias.query.all():
-        alias_domain = get_email_domain_part(deleted_alias.email)
-        if not SLDomain.get_by(domain=alias_domain):
-            custom_domain = CustomDomain.get_by(domain=alias_domain)
-            if custom_domain:
-                LOG.d("move %s to domain %s trash", deleted_alias, custom_domain)
-                db.session.add(
-                    DomainDeletedAlias(
-                        user_id=custom_domain.user_id,
-                        email=deleted_alias.email,
-                        domain_id=custom_domain.id,
-                        created_at=deleted_alias.created_at,
-                    )
-                )
-                DeletedAlias.delete(deleted_alias.id)
-
-    db.session.commit()
 
 
 def disable_mailbox(mailbox_id):
