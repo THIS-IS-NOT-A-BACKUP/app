@@ -35,6 +35,8 @@ from app.admin_model import (
     LifetimeCouponAdmin,
     ManualSubscriptionAdmin,
     ClientAdmin,
+    ReferralAdmin,
+    PayoutAdmin,
 )
 from app.api.base import api_bp
 from app.auth.base import auth_bp
@@ -95,6 +97,7 @@ from app.models import (
     Contact,
     RefusedEmail,
     ManualSubscription,
+    Payout,
 )
 from app.monitor.base import monitor_bp
 from app.oauth.base import oauth_bp
@@ -373,7 +376,17 @@ def fake_data():
 
     ClientUser.create(user_id=user.id, client_id=client1.id, name="Fake Name")
 
-    referral = Referral.create(user_id=user.id, code="REFCODE", name="First referral")
+    referral = Referral.create(user_id=user.id, code="Website", name="First referral")
+    Referral.create(user_id=user.id, code="Podcast", name="First referral")
+    Payout.create(
+        user_id=user.id, amount=1000, number_upgraded_account=100, payment_method="BTC"
+    )
+    Payout.create(
+        user_id=user.id,
+        amount=5000,
+        number_upgraded_account=200,
+        payment_method="PayPal",
+    )
     db.session.commit()
 
     for i in range(6):
@@ -832,6 +845,8 @@ def init_admin(app):
     admin.add_view(LifetimeCouponAdmin(LifetimeCoupon, db.session))
     admin.add_view(ManualSubscriptionAdmin(ManualSubscription, db.session))
     admin.add_view(ClientAdmin(Client, db.session))
+    admin.add_view(ReferralAdmin(Referral, db.session))
+    admin.add_view(PayoutAdmin(Payout, db.session))
 
 
 def setup_do_not_track(app):

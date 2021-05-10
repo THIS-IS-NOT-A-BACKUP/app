@@ -1954,9 +1954,11 @@ class Referral(db.Model, ModelMixin):
 
     user = db.relationship(User, foreign_keys=[user_id])
 
+    @property
     def nb_user(self) -> int:
         return User.filter_by(referral_id=self.id, activated=True).count()
 
+    @property
     def nb_paid_user(self) -> int:
         res = 0
         for user in User.filter_by(referral_id=self.id, activated=True):
@@ -2223,3 +2225,22 @@ class TransactionalEmail(db.Model, ModelMixin):
     """
 
     email = db.Column(db.String(256), nullable=False, unique=True)
+
+
+class Payout(db.Model, ModelMixin):
+    """Referral payouts"""
+
+    user_id = db.Column(db.ForeignKey("users.id", ondelete="cascade"), nullable=False)
+
+    # in USD
+    amount = db.Column(db.Float, nullable=False)
+
+    # BTC, PayPal, etc
+    payment_method = db.Column(db.String(256), nullable=False)
+
+    # number of upgraded user included in this payout
+    number_upgraded_account = db.Column(db.Integer, nullable=False)
+
+    comment = db.Column(db.Text)
+
+    user = db.relationship(User)
