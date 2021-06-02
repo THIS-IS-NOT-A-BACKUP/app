@@ -5,7 +5,6 @@ from email.utils import formataddr
 from typing import List, Tuple, Optional
 
 import arrow
-import bcrypt
 from arrow import Arrow
 from flask import url_for
 from flask_login import UserMixin
@@ -30,6 +29,7 @@ from app.errors import AliasInTrashError
 from app.extensions import db
 from app.log import LOG
 from app.oauth_models import Scope
+from app.pw_models import PasswordOracle
 from app.utils import (
     convert_to_id,
     random_string,
@@ -184,12 +184,9 @@ class Fido(db.Model, ModelMixin):
     name = db.Column(db.String(128), nullable=False, unique=False)
 
 
-class User(db.Model, ModelMixin, UserMixin):
+class User(db.Model, ModelMixin, UserMixin, PasswordOracle):
     __tablename__ = "users"
     email = db.Column(db.String(256), unique=True, nullable=False)
-
-    salt = db.Column(db.String(128), nullable=True)
-    password = db.Column(db.String(128), nullable=True)
 
     name = db.Column(db.String(128), nullable=True)
     is_admin = db.Column(db.Boolean, nullable=False, default=False)
@@ -521,18 +518,6 @@ class User(db.Model, ModelMixin, UserMixin):
             return True
         else:
             return Alias.filter_by(user_id=self.id).count() < MAX_NB_EMAIL_FREE_PLAN
-
-    def set_password(self, password):
-        salt = bcrypt.gensalt()
-        password_hash = bcrypt.hashpw(password.encode(), salt).decode()
-        self.salt = salt.decode()
-        self.password = password_hash
-
-    def check_password(self, password) -> bool:
-        if not self.password:
-            return False
-        password_hash = bcrypt.hashpw(password.encode(), self.salt.encode())
-        return self.password.encode() == password_hash
 
     def profile_picture_url(self):
         if self.profile_picture_id:
@@ -1507,6 +1492,12 @@ class EmailLog(db.Model, ModelMixin):
             return "bounced"
         elif self.blocked:
             return "block"
+        else:
+            return "forward"
+
+    def get_phase(self) -> str:
+        if self.is_reply:
+            return "reply"
         else:
             return "forward"
 
