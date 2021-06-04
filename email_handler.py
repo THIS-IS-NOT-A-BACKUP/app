@@ -106,6 +106,7 @@ from app.email_utils import (
     spf_pass,
     sl_sendmail,
     sanitize_header,
+    get_queue_id,
 )
 from app.extensions import db
 from app.greylisting import greylisting_needed
@@ -491,13 +492,13 @@ def handle_forward(envelope, msg: Message, rcpt_to: str) -> List[Tuple[bool, str
         LOG.w("User %s disabled, disable forwarding emails for %s", user, alias)
         return [(False, "550 SL E20 Account disabled")]
 
-    mail_from = envelope.mail_from
-    for mb in alias.mailboxes:
-        # email send from a mailbox to alias
-        if mb.email == mail_from:
-            LOG.w("cycle email sent from %s to %s", mb, alias)
-            handle_email_sent_to_ourself(alias, mb, msg, user)
-            return [(True, "250 Message accepted for delivery")]
+    # mail_from = envelope.mail_from
+    # for mb in alias.mailboxes:
+    #     # email send from a mailbox to alias
+    #     if mb.email == mail_from:
+    #         LOG.w("cycle email sent from %s to %s", mb, alias)
+    #         handle_email_sent_to_ourself(alias, mb, msg, user)
+    #         return [(True, "250 Message accepted for delivery")]
 
     LOG.d("Create or get contact for from:%s reply-to:%s", msg["From"], msg["Reply-To"])
     # prefer using Reply-To when creating contact
@@ -1535,6 +1536,9 @@ def handle(envelope: Envelope) -> str:
     envelope.rcpt_tos = rcpt_tos
 
     msg = email.message_from_bytes(envelope.original_content)
+    postfix_queue_id = get_queue_id(msg)
+    if postfix_queue_id:
+        set_message_id(postfix_queue_id)
 
     # sanitize email headers
     sanitize_header(msg, "from")
@@ -1605,7 +1609,7 @@ def handle(envelope: Envelope) -> str:
         email_log_id = parse_id_from_bounce(mail_from)
         email_log = EmailLog.get(email_log_id)
         alias = Alias.get_by(email=rcpt_tos[0])
-        LOG.e(
+        LOG.w(
             "iCloud bounces %s %s msg=%s",
             email_log,
             alias,
