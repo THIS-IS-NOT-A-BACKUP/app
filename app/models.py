@@ -462,7 +462,10 @@ class User(db.Model, ModelMixin, UserMixin, PasswordOracle):
 
         sub: Subscription = self.get_subscription()
         if sub:
-            return f"Paddle Subscription {sub.subscription_id}"
+            if sub.cancelled:
+                return f"Cancelled Paddle Subscription {sub.subscription_id}"
+            else:
+                return f"Active Paddle Subscription {sub.subscription_id}"
 
         apple_sub: AppleSubscription = AppleSubscription.get_by(user_id=self.id)
         if apple_sub and apple_sub.is_valid():
@@ -483,6 +486,28 @@ class User(db.Model, ModelMixin, UserMixin, PasswordOracle):
             return "In Trial"
 
         return "N/A"
+
+    @property
+    def subscription_cancelled(self) -> bool:
+        sub: Subscription = self.get_subscription()
+        if sub and sub.cancelled:
+            return True
+
+        apple_sub: AppleSubscription = AppleSubscription.get_by(user_id=self.id)
+        if apple_sub and not apple_sub.is_valid():
+            return True
+
+        manual_sub: ManualSubscription = ManualSubscription.get_by(user_id=self.id)
+        if manual_sub and not manual_sub.is_active():
+            return True
+
+        coinbase_subscription: CoinbaseSubscription = CoinbaseSubscription.get_by(
+            user_id=self.id
+        )
+        if coinbase_subscription and not coinbase_subscription.is_active():
+            return True
+
+        return False
 
     @property
     def premium_end(self) -> str:
