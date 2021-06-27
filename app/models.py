@@ -24,6 +24,7 @@ from app.config import (
     FIRST_ALIAS_DOMAIN,
     DISABLE_ONBOARDING,
     UNSUBSCRIBER,
+    ALIAS_RANDOM_SUFFIX_LENGTH,
 )
 from app.errors import AliasInTrashError
 from app.extensions import db
@@ -34,8 +35,8 @@ from app.utils import (
     convert_to_id,
     random_string,
     random_words,
-    random_word,
     sanitize_email,
+    random_word,
 )
 
 
@@ -160,6 +161,11 @@ class SenderFormatEnum(EnumE):
 class AliasGeneratorEnum(EnumE):
     word = 1  # aliases are generated based on random words
     uuid = 2  # aliases are generated based on uuid
+
+
+class AliasSuffixEnum(EnumE):
+    word = 0  # Random word from dictionary file
+    random_string = 1  # Completely random string
 
 
 class Hibp(db.Model, ModelMixin):
@@ -291,6 +297,16 @@ class User(db.Model, ModelMixin, UserMixin, PasswordOracle):
     # whether to include the sender address in reverse-alias
     include_sender_in_reverse_alias = db.Column(
         db.Boolean, default=False, nullable=False, server_default="0"
+    )
+
+    # whether to use random string or random word as suffix
+    # Random word from dictionary file -> 0
+    # Completely random string -> 1
+    random_alias_suffix = db.Column(
+        db.Integer,
+        nullable=False,
+        default=AliasSuffixEnum.random_string.value,
+        server_default=str(AliasSuffixEnum.random_string.value),
     )
 
     @classmethod
@@ -743,6 +759,17 @@ class User(db.Model, ModelMixin, UserMixin, PasswordOracle):
             > 0
         )
 
+    def get_random_alias_suffix(self):
+        """Get random suffix for an alias based on user's preference.
+
+
+        Returns:
+            str: the random suffix generated
+        """
+        if self.random_alias_suffix == AliasSuffixEnum.random_string.value:
+            return random_string(ALIAS_RANDOM_SUFFIX_LENGTH, include_digits=True)
+        return random_word()
+
     def __repr__(self):
         return f"<User {self.id} {self.name} {self.email}>"
 
@@ -1132,7 +1159,7 @@ class Alias(db.Model, ModelMixin):
 
         # find the right suffix - avoid infinite loop by running this at max 1000 times
         for i in range(1000):
-            suffix = random_word()
+            suffix = user.get_random_alias_suffix()
             email = f"{prefix}.{suffix}@{FIRST_ALIAS_DOMAIN}"
 
             if not cls.get_by(email=email) and not DeletedAlias.get_by(email=email):
