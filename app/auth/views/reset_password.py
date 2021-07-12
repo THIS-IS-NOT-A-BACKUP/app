@@ -1,9 +1,9 @@
-from flask import request, flash, render_template, redirect, url_for, g
-from flask_login import login_user
+from flask import request, flash, render_template, url_for, g
 from flask_wtf import FlaskForm
 from wtforms import StringField, validators
 
 from app.auth.base import auth_bp
+from app.auth.views.login_utils import after_login
 from app.extensions import db, limiter
 from app.models import ResetPasswordCode
 
@@ -57,10 +57,10 @@ def reset_password():
 
         # remove the reset password code
         ResetPasswordCode.delete(reset_password_code.id)
-
         db.session.commit()
-        login_user(user)
 
-        return redirect(url_for("dashboard.index"))
+        # do not use login_user(user) here
+        # to make sure user needs to go through MFA if enabled
+        return after_login(user, url_for("dashboard.index"))
 
     return render_template("auth/reset_password.html", form=form)
