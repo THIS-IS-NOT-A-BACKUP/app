@@ -1,5 +1,6 @@
 import json
 import os
+import time
 from datetime import timedelta
 
 import arrow
@@ -37,6 +38,7 @@ from app.admin_model import (
     ClientAdmin,
     ReferralAdmin,
     PayoutAdmin,
+    CouponAdmin,
 )
 from app.api.base import api_bp
 from app.auth.base import auth_bp
@@ -98,6 +100,7 @@ from app.models import (
     RefusedEmail,
     ManualSubscription,
     Payout,
+    Coupon,
 )
 from app.monitor.base import monitor_bp
 from app.oauth.base import oauth_bp
@@ -266,7 +269,8 @@ def fake_data():
         commit=True,
     )
 
-    LifetimeCoupon.create(code="coupon", nb_used=10, commit=True)
+    LifetimeCoupon.create(code="lifetime-coupon", nb_used=10, commit=True)
+    Coupon.create(code="coupon", commit=True)
 
     # Create a subscription for user
     Subscription.create(
@@ -445,6 +449,16 @@ def set_index_page(app):
         else:
             return redirect(url_for("auth.login"))
 
+    @app.before_request
+    def before_request():
+        # not logging /static call
+        if (
+            not request.path.startswith("/static")
+            and not request.path.startswith("/admin/static")
+            and not request.path.startswith("/_debug_toolbar")
+        ):
+            g.start_time = time.time()
+
     @app.after_request
     def after_request(res):
         # not logging /static call
@@ -454,12 +468,13 @@ def set_index_page(app):
             and not request.path.startswith("/_debug_toolbar")
         ):
             LOG.debug(
-                "%s %s %s %s %s",
+                "%s %s %s %s %s, takes %s",
                 request.remote_addr,
                 request.method,
                 request.path,
                 request.args,
                 res.status_code,
+                time.time() - g.start_time,
             )
 
         return res
@@ -848,6 +863,7 @@ def init_admin(app):
     admin.add_view(MailboxAdmin(Mailbox, db.session))
     admin.add_view(EmailLogAdmin(EmailLog, db.session))
     admin.add_view(LifetimeCouponAdmin(LifetimeCoupon, db.session))
+    admin.add_view(CouponAdmin(Coupon, db.session))
     admin.add_view(ManualSubscriptionAdmin(ManualSubscription, db.session))
     admin.add_view(ClientAdmin(Client, db.session))
     admin.add_view(ReferralAdmin(Referral, db.session))
@@ -865,13 +881,23 @@ def register_custom_commands(app):
     @app.cli.command("fill-up-email-log-alias")
     def fill_up_email_log_alias():
         """Fill up email_log.alias_id column"""
-        for email_log, contact in db.session.query(EmailLog, Contact).filter(
-            EmailLog.contact_id == Contact.id
-        ):
-            LOG.d("fill up alias for %s", email_log)
-            email_log.alias_id = contact.alias_id
+        # split all emails logs into 1000-size trunks
+        nb_email_log = EmailLog.query.count()
+        LOG.d("total trunks %s", nb_email_log // 1000 + 2)
+        for trunk in reversed(range(1, nb_email_log // 1000 + 2)):
+            nb_update = 0
+            for email_log, contact in (
+                db.session.query(EmailLog, Contact)
+                .filter(EmailLog.contact_id == Contact.id)
+                .filter(EmailLog.id <= trunk * 1000)
+                .filter(EmailLog.id > (trunk - 1) * 1000)
+                .filter(EmailLog.alias_id.is_(None))
+            ):
+                email_log.alias_id = contact.alias_id
+                nb_update += 1
 
-        db.session.commit()
+            LOG.d("finish trunk %s, update %s email logs", trunk, nb_update)
+            db.session.commit()
 
 
 def setup_do_not_track(app):
@@ -898,11 +924,12 @@ def local_main():
     app = create_app()
 
     # enable flask toolbar
-    # from flask_debugtoolbar import DebugToolbarExtension
-    # app.config["DEBUG_TB_PROFILER_ENABLED"] = True
-    # app.config["DEBUG_TB_INTERCEPT_REDIRECTS"] = False
-    # app.debug = True
-    # DebugToolbarExtension(app)
+    from flask_debugtoolbar import DebugToolbarExtension
+
+    app.config["DEBUG_TB_PROFILER_ENABLED"] = True
+    app.config["DEBUG_TB_INTERCEPT_REDIRECTS"] = False
+    app.debug = True
+    DebugToolbarExtension(app)
 
     # warning: only used in local
     if RESET_DB:

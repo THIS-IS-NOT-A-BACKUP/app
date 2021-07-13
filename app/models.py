@@ -1353,7 +1353,7 @@ class Contact(db.Model, ModelMixin):
     # This address allows to hide user personal email
     # this reply email is created every time a website sends an email to user
     # it has the prefix "reply+" or "ra+" to distinguish with other email
-    reply_email = db.Column(db.String(512), nullable=False)
+    reply_email = db.Column(db.String(512), nullable=False, index=True)
 
     # whether a contact is created via CC
     is_cc = db.Column(db.Boolean, nullable=False, default=False, server_default="0")
@@ -1822,6 +1822,22 @@ class LifetimeCoupon(db.Model, ModelMixin):
     code = db.Column(db.String(128), nullable=False, unique=True)
     nb_used = db.Column(db.Integer, nullable=False)
     paid = db.Column(db.Boolean, default=False, server_default="0", nullable=False)
+
+
+class Coupon(db.Model, ModelMixin):
+    code = db.Column(db.String(128), nullable=False, unique=True)
+
+    # by default a coupon is for 1 year
+    nb_year = db.Column(db.Integer, nullable=False, server_default="1", default=1)
+
+    # whether the coupon has been used
+    used = db.Column(db.Boolean, default=False, server_default="0", nullable=False)
+
+    # the user who uses the code
+    # non-null when the coupon is used
+    used_by_user_id = db.Column(
+        db.ForeignKey(User.id, ondelete="cascade"), nullable=True
+    )
 
 
 class Directory(db.Model, ModelMixin):
