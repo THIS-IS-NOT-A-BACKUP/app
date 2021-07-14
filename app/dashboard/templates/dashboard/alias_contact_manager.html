@@ -51,19 +51,47 @@
         </p>
       </div>
     </div>
-
   </div>
 
-  <form method="post">
-    <input type="hidden" name="form-name" value="create">
-    {{ new_contact_form.csrf_token }}
+  <div class="row mb-5">
+    <div class="col-12 col-lg-6 pt-1">
 
-    <label class="form-label">Where do you want to send the email?</label>
+      <form method="post">
+        <input type="hidden" name="form-name" value="create">
+        {{ new_contact_form.csrf_token }}
+        {{ new_contact_form.email(class="form-control", placeholder="First Last <email@example.com>", autofocus=True) }}
+        {{ render_field_errors(new_contact_form.email) }}
+        <div class="small-text">
+          Where do you want to send the email?
+        </div>
+        <button class="btn btn-primary mt-2">Create reverse-alias</button>
+      </form>
+    </div>
 
-    {{ new_contact_form.email(class="form-control", placeholder="First Last <email@example.com>", autofocus=True) }}
-    {{ render_field_errors(new_contact_form.email) }}
-    <button class="btn btn-primary mt-2">Create reverse-alias</button>
-  </form>
+    <div class="col-12 col-lg-6 pt-1">
+      <div class="float-right d-flex">
+        <form method="post">
+          <input type="hidden" name="form-name" value="search">
+
+          <input type="search" name="query" value="{{ query }}"
+                 placeholder="Enter to search for contacts"
+                 class="form-control shadow mr-2"
+                 style="max-width: 20em"
+          >
+        </form>
+
+        {% if query %}
+          {% if highlight_contact_id %}
+            <a href="{{ url_for("dashboard.alias_contact_manager", alias_id=alias.id, highlight_contact_id=highlight_contact_id) }}"
+               class="btn btn-light">Reset</a>
+          {% else %}
+            <a href="{{ url_for("dashboard.alias_contact_manager", alias_id=alias.id) }}"
+               class="btn btn-light">Reset</a>
+          {% endif %}
+        {% endif %}
+      </div>
+    </div>
+  </div>
 
   <div class="row">
     {% for contact_info in contact_infos %}
@@ -92,42 +120,39 @@
             </span>
           </div>
 
+
           <div class="mb-2 text-muted small-text">
-          Contact created {{ contact.created_at | dt }}
+            {% if contact_info.latest_email_log != None %}
+              {% set email_log = contact_info.latest_email_log %}
+
+              {% if email_log.is_reply %}
+                <i class="fa fa-reply mr-2" data-toggle="tooltip" title="Email reply/sent from alias"></i>
+                {{ email_log.created_at | dt }}
+              {% elif email_log.bounced %}
+                <span class="text-danger">
+                  <i class="fa fa-warning mr-2" data-toggle="tooltip"
+                     title="Email bounced and cannot be forwarded to your mailbox"></i>
+                  {{ email_log.created_at | dt }}
+                </span>
+              {% elif email_log.blocked %}
+                <i class="fa fa-ban mr-2 text-danger" data-toggle="tooltip" title="Email blocked"></i>
+                {{ email_log.created_at | dt }}
+              {% else %}
+                <i class="fa fa-paper-plane  mr-2" data-toggle="tooltip" title="Email sent to alias"></i>
+                {{ email_log.created_at | dt }}
+              {% endif %}
+              <br>
+              Contact created {{ contact.created_at | dt }}
+            {% else %}
+              No Activity. Contact created {{ contact.created_at | dt }}
+            {% endif %}
+
+            <div>
+              <span class="alias-activity">{{ contact_info.nb_forward }}</span> forwards,
+              <span class="alias-activity">{{ contact_info.nb_reply }}</span> replies
+              in the last 14 days.
+            </div>
           </div>
-
-
-{#          <div class="mb-2 text-muted small-text">#}
-{#            {% if contact_info.latest_email_log != None %}#}
-{#              {% set email_log = contact_info.latest_email_log %}#}
-{##}
-{#              {% if email_log.is_reply %}#}
-{#                <i class="fa fa-reply mr-2" data-toggle="tooltip" title="Email reply/sent from alias"></i>#}
-{#                {{ email_log.created_at | dt }}#}
-{#              {% elif email_log.bounced %}#}
-{#                <span class="text-danger">#}
-{#                  <i class="fa fa-warning mr-2" data-toggle="tooltip"#}
-{#                     title="Email bounced and cannot be forwarded to your mailbox"></i>#}
-{#                  {{ email_log.created_at | dt }}#}
-{#                </span>#}
-{#              {% elif email_log.blocked %}#}
-{#                <i class="fa fa-ban mr-2 text-danger" data-toggle="tooltip" title="Email blocked"></i>#}
-{#                {{ email_log.created_at | dt }}#}
-{#              {% else %}#}
-{#                <i class="fa fa-paper-plane  mr-2" data-toggle="tooltip" title="Email sent to alias"></i>#}
-{#                {{ email_log.created_at | dt }}#}
-{#              {% endif %}#}
-{#              <br>#}
-{#              Contact created {{ contact.created_at | dt }}#}
-{#            {% else %}#}
-{#              No Activity. Contact created {{ contact.created_at | dt }}#}
-{#            {% endif %}#}
-{##}
-{#            <div>#}
-{#              <span class="alias-activity">{{ contact_info.nb_forward }}</span> forwards,#}
-{#              <span class="alias-activity">{{ contact_info.nb_reply }}</span> replies#}
-{#            </div>#}
-{#          </div>#}
 
           <a href="{{ url_for('dashboard.contact_detail_route', contact_id=contact.id) }}">Edit ➡</a>
 
