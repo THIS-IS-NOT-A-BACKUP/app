@@ -48,7 +48,6 @@ from app.models import (
     Monitoring,
     Contact,
     CoinbaseSubscription,
-    Metric,
     TransactionalEmail,
     Bounce,
     Metric2,
@@ -214,130 +213,10 @@ def poll_apple_subscription():
     LOG.d("Finish poll_apple_subscription")
 
 
-def compute_metrics():
-    now = arrow.now()
-
-    Metric.create(date=now, name=Metric.NB_USER, value=User.query.count(), commit=True)
-    Metric.create(
-        date=now,
-        name=Metric.NB_ACTIVATED_USER,
-        value=User.query.filter_by(activated=True).count(),
-        commit=True,
-    )
-
-    Metric.create(
-        date=now,
-        name=Metric.NB_REFERRED_USER,
-        value=User.query.filter(User.referral_id.isnot(None)).count(),
-        commit=True,
-    )
-
-    nb_referred_user_paid = 0
-    for user in User.query.filter(User.referral_id.isnot(None)):
-        if user.is_paid():
-            nb_referred_user_paid += 1
-
-    Metric.create(
-        date=now,
-        name=Metric.NB_REFERRED_USER_PAID,
-        value=nb_referred_user_paid,
-        commit=True,
-    )
-
-    Metric.create(
-        date=now, name=Metric.NB_ALIAS, value=Alias.query.count(), commit=True
-    )
-
-    Metric.create(
-        date=now,
-        name=Metric.NB_BOUNCED,
-        value=EmailLog.query.filter_by(bounced=True).count(),
-        commit=True,
-    )
-    Metric.create(
-        date=now,
-        name=Metric.NB_SPAM,
-        value=EmailLog.query.filter_by(is_spam=True).count(),
-        commit=True,
-    )
-    Metric.create(
-        date=now,
-        name=Metric.NB_REPLY,
-        value=EmailLog.query.filter_by(is_reply=True).count(),
-        commit=True,
-    )
-    Metric.create(
-        date=now,
-        name=Metric.NB_BLOCK,
-        value=EmailLog.query.filter_by(blocked=True).count(),
-        commit=True,
-    )
-    Metric.create(
-        date=now,
-        name=Metric.NB_FORWARD,
-        value=EmailLog.query.filter_by(
-            bounced=False, is_spam=False, is_reply=False, blocked=False
-        ).count(),
-        commit=True,
-    )
-
-    Metric.create(
-        date=now,
-        name=Metric.NB_PREMIUM,
-        value=Subscription.query.filter(Subscription.cancelled.is_(False)).count(),
-        commit=True,
-    )
-
-    Metric.create(
-        date=now,
-        name=Metric.NB_CANCELLED_PREMIUM,
-        value=Subscription.query.filter(Subscription.cancelled.is_(True)).count(),
-        commit=True,
-    )
-
-    Metric.create(
-        date=now,
-        name=Metric.NB_APPLE_PREMIUM,
-        value=AppleSubscription.query.count(),
-        commit=True,
-    )
-
-    Metric.create(
-        date=now,
-        name=Metric.NB_MANUAL_PREMIUM,
-        value=ManualSubscription.query.filter(
-            ManualSubscription.end_at > now,
-            ManualSubscription.is_giveaway.is_(False),
-        ).count(),
-        commit=True,
-    )
-
-    Metric.create(
-        date=now,
-        name=Metric.NB_COINBASE_PREMIUM,
-        value=CoinbaseSubscription.query.filter(
-            CoinbaseSubscription.end_at > now
-        ).count(),
-        commit=True,
-    )
-
-    Metric.create(
-        date=now,
-        name=Metric.NB_VERIFIED_CUSTOM_DOMAIN,
-        value=CustomDomain.query.filter_by(verified=True).count(),
-        commit=True,
-    )
-
-    Metric.create(
-        date=now,
-        name=Metric.NB_APP,
-        value=Client.query.count(),
-        commit=True,
-    )
-
-
 def compute_metric2() -> Metric2:
     now = arrow.now()
+    _24h_ago = now.shift(days=-1)
+
     nb_referred_user_paid = 0
     for user in User.query.filter(User.referral_id.isnot(None)):
         if user.is_paid():
@@ -367,13 +246,19 @@ def compute_metric2() -> Metric2:
         nb_referred_user_paid=nb_referred_user_paid,
         nb_alias=Alias.query.count(),
         # email log stats
-        nb_bounced=EmailLog.query.filter_by(bounced=True).count(),
-        nb_spam=EmailLog.query.filter_by(is_spam=True).count(),
-        nb_reply=EmailLog.query.filter_by(is_reply=True).count(),
-        nb_forward=EmailLog.query.filter_by(
-            bounced=False, is_spam=False, is_reply=False, blocked=False
-        ).count(),
-        nb_block=EmailLog.query.filter_by(blocked=True).count(),
+        nb_forward_last_24h=EmailLog.query.filter(EmailLog.created_at > _24h_ago)
+        .filter_by(bounced=False, is_spam=False, is_reply=False, blocked=False)
+        .count(),
+        nb_bounced_last_24h=EmailLog.query.filter(EmailLog.created_at > _24h_ago)
+        .filter_by(bounced=True)
+        .count(),
+        nb_reply_last_24h=EmailLog.query.filter(EmailLog.created_at > _24h_ago)
+        .filter_by(is_reply=True)
+        .count(),
+        nb_block_last_24h=EmailLog.query.filter(EmailLog.created_at > _24h_ago)
+        .filter_by(blocked=True)
+        .count(),
+        # other stats
         nb_verified_custom_domain=CustomDomain.query.filter_by(verified=True).count(),
         nb_app=Client.query.count(),
         commit=True,
@@ -485,9 +370,6 @@ def stats():
         # nothing to do
         return
 
-    # todo: remove metrics1
-    compute_metrics()
-
     stats_today = compute_metric2()
     stats_yesterday = (
         Metric2.query.filter(Metric2.date < stats_today.date)
@@ -514,11 +396,10 @@ nb_manual_premium: {stats_today.nb_manual_premium} - {increase_percent(stats_yes
 nb_coinbase_premium: {stats_today.nb_coinbase_premium} - {increase_percent(stats_yesterday.nb_coinbase_premium, stats_today.nb_coinbase_premium)}  <br>
 nb_alias: {stats_today.nb_alias} - {increase_percent(stats_yesterday.nb_alias, stats_today.nb_alias)}  <br>
 
-nb_forward: {stats_today.nb_forward} - {increase_percent(stats_yesterday.nb_forward, stats_today.nb_forward)}  <br>
-nb_reply: {stats_today.nb_reply} - {increase_percent(stats_yesterday.nb_reply, stats_today.nb_reply)}  <br>
-nb_block: {stats_today.nb_block} - {increase_percent(stats_yesterday.nb_block, stats_today.nb_block)}  <br>
-nb_bounced: {stats_today.nb_bounced} - {increase_percent(stats_yesterday.nb_bounced, stats_today.nb_bounced)}  <br>
-nb_spam: {stats_today.nb_spam} - {increase_percent(stats_yesterday.nb_spam, stats_today.nb_spam)}  <br>
+nb_forward_last_24h: {stats_today.nb_forward_last_24h} - {increase_percent(stats_yesterday.nb_forward_last_24h, stats_today.nb_forward_last_24h)}  <br>
+nb_reply_last_24h: {stats_today.nb_reply_last_24h} - {increase_percent(stats_yesterday.nb_reply_last_24h, stats_today.nb_reply_last_24h)}  <br>
+nb_block_last_24h: {stats_today.nb_block_last_24h} - {increase_percent(stats_yesterday.nb_block_last_24h, stats_today.nb_block_last_24h)}  <br>
+nb_bounced_last_24h: {stats_today.nb_bounced_last_24h} - {increase_percent(stats_yesterday.nb_bounced_last_24h, stats_today.nb_bounced_last_24h)}  <br>
 
 nb_custom_domain: {stats_today.nb_verified_custom_domain} - {increase_percent(stats_yesterday.nb_verified_custom_domain, stats_today.nb_verified_custom_domain)}  <br>
 nb_app: {stats_today.nb_app} - {increase_percent(stats_yesterday.nb_app, stats_today.nb_app)}  <br>
