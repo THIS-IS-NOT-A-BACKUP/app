@@ -173,8 +173,23 @@ class Hibp(db.Model, ModelMixin):
     name = db.Column(db.String(), nullable=False, unique=True, index=True)
     breached_aliases = db.relationship("Alias", secondary="alias_hibp")
 
+    description = db.Column(db.Text)
+    date = db.Column(ArrowType, nullable=True)
+
     def __repr__(self):
         return f"<HIBP Breach {self.id} {self.name}>"
+
+
+class HibpNotifiedAlias(db.Model, ModelMixin):
+    """Contain list of aliases that have been notified to users
+    So that we can only notify users of new aliases.
+    """
+
+    __tablename__ = "hibp_notified_alias"
+    alias_id = db.Column(db.ForeignKey("alias.id", ondelete="cascade"), nullable=False)
+    user_id = db.Column(db.ForeignKey("users.id", ondelete="cascade"), nullable=False)
+
+    notified_at = db.Column(ArrowType, default=arrow.utcnow, nullable=False)
 
 
 class Fido(db.Model, ModelMixin):

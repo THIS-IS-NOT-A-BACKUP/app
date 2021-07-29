@@ -7,6 +7,7 @@ from typing import List, Tuple
 import arrow
 import requests
 from sqlalchemy import func, desc, or_
+from sqlalchemy.orm import joinedload
 
 from app import s3
 from app.alias_utils import nb_email_log_for_mailbox
@@ -55,6 +56,7 @@ from app.models import (
     DeletedAlias,
     DomainDeletedAlias,
     Hibp,
+    HibpNotifiedAlias,
 )
 from app.utils import sanitize_email
 from server import create_app
@@ -269,8 +271,11 @@ def increase_percent(old, new) -> str:
     if old == 0:
         return "N/A"
 
+    if not old or not new:
+        return "N/A"
+
     increase = (new - old) / old * 100
-    return f"{increase:.1f}%. Delta: {new-old}"
+    return f"{increase:.1f}%. Delta: {new - old}"
 
 
 def bounce_report() -> List[Tuple[str, int]]:
@@ -729,7 +734,9 @@ async def check_hibp():
     LOG.d("Updating list of known breaches")
     r = requests.get("https://haveibeenpwned.com/api/v3/breaches")
     for entry in r.json():
-        Hibp.get_or_create(name=entry["Name"])
+        hibp_entry = Hibp.get_or_create(name=entry["Name"])
+        hibp_entry.date = arrow.get(entry["BreachDate"])
+        hibp_entry.description = entry["Description"]
 
     db.session.commit()
     LOG.d("Updated list of known breaches")
@@ -769,6 +776,57 @@ async def check_hibp():
     LOG.d("Done checking HIBP API for aliases in breaches")
 
 
+def notify_hibp():
+    """
+    Send aggregated email reports for HIBP breaches
+    """
+    # to get a list of users that have at least a breached alias
+    alias_query = (
+        db.session.query(Alias)
+        .options(joinedload(Alias.hibp_breaches))
+        .filter(Alias.hibp_breaches.any())
+        .filter(Alias.id.notin_(db.session.query(HibpNotifiedAlias.alias_id)))
+        .distinct(Alias.user_id)
+        .all()
+    )
+
+    user_ids = [alias.user_id for alias in alias_query]
+
+    for user in User.query.filter(User.id.in_(user_ids)):
+        breached_aliases = (
+            db.session.query(Alias)
+            .options(joinedload(Alias.hibp_breaches))
+            .filter(Alias.hibp_breaches.any(), Alias.user_id == user.id)
+            .all()
+        )
+
+        LOG.d(
+            f"Send new breaches found email to %s for %s breaches aliases",
+            user,
+            len(breached_aliases),
+        )
+
+        send_email(
+            user.email,
+            f"You were in a data breach",
+            render(
+                "transactional/hibp-new-breaches.txt.jinja2",
+                user=user,
+                breached_aliases=breached_aliases,
+            ),
+            render(
+                "transactional/hibp-new-breaches.html",
+                user=user,
+                breached_aliases=breached_aliases,
+            ),
+        )
+
+        # add the breached aliases to HibpNotifiedAlias to avoid sending another email
+        for alias in breached_aliases:
+            HibpNotifiedAlias.create(user_id=user.id, alias_id=alias.id)
+        db.session.commit()
+
+
 if __name__ == "__main__":
     LOG.d("Start running cronjob")
     parser = argparse.ArgumentParser()
@@ -788,6 +846,7 @@ if __name__ == "__main__":
             "delete_old_monitoring",
             "check_custom_domain",
             "check_hibp",
+            "notify_hibp",
         ],
     )
     args = parser.parse_args()
@@ -825,3 +884,6 @@ if __name__ == "__main__":
         elif args.job == "check_hibp":
             LOG.d("Check HIBP")
             asyncio.run(check_hibp())
+        elif args.job == "notify_hibp":
+            LOG.d("Notify users about HIBP breaches")
+            notify_hibp()
