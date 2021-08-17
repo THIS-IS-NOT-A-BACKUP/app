@@ -15,15 +15,21 @@ from app.email_utils import send_email
 from app.extensions import db
 from app.log import LOG
 from app.models import CustomDomain, Alias, DomainDeletedAlias
+from app.utils import random_string
 
 
 @dashboard_bp.route("/domains/<int:custom_domain_id>/dns", methods=["GET", "POST"])
 @login_required
 def domain_detail_dns(custom_domain_id):
-    custom_domain = CustomDomain.get(custom_domain_id)
+    custom_domain: CustomDomain = CustomDomain.get(custom_domain_id)
     if not custom_domain or custom_domain.user_id != current_user.id:
         flash("You cannot see this page", "warning")
         return redirect(url_for("dashboard.index"))
+
+    # generate a domain ownership txt token if needed
+    if not custom_domain.ownership_verified and not custom_domain.ownership_txt_token:
+        custom_domain.ownership_txt_token = random_string(30)
+        db.session.commit()
 
     spf_record = f"v=spf1 include:{EMAIL_DOMAIN} -all"
 
@@ -32,11 +38,33 @@ def domain_detail_dns(custom_domain_id):
 
     dmarc_record = "v=DMARC1; p=quarantine; pct=100; adkim=s; aspf=s"
 
-    mx_ok = spf_ok = dkim_ok = dmarc_ok = True
-    mx_errors = spf_errors = dkim_errors = dmarc_errors = []
+    mx_ok = spf_ok = dkim_ok = dmarc_ok = ownership_ok = True
+    mx_errors = spf_errors = dkim_errors = dmarc_errors = ownership_errors = []
 
     if request.method == "POST":
-        if request.form.get("form-name") == "check-mx":
+        if request.form.get("form-name") == "check-ownership":
+            txt_records = get_txt_record(custom_domain.domain)
+
+            if custom_domain.get_ownership_dns_txt_value() in txt_records:
+                flash(
+                    "Domain ownership is verified. Please proceed to the other records setup",
+                    "success",
+                )
+                custom_domain.ownership_verified = True
+                db.session.commit()
+                return redirect(
+                    url_for(
+                        "dashboard.domain_detail_dns",
+                        custom_domain_id=custom_domain.id,
+                        _anchor="dns-setup",
+                    )
+                )
+            else:
+                flash("We can't find the needed TXT record", "error")
+                ownership_ok = False
+                ownership_errors = txt_records
+
+        elif request.form.get("form-name") == "check-mx":
             mx_domains = get_mx_domains(custom_domain.domain)
 
             if sorted(mx_domains) != sorted(EMAIL_SERVERS_WITH_PRIORITY):
