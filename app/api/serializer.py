@@ -227,9 +227,10 @@ def get_alias_infos_with_pagination_v3(
             .filter(
                 or_(
                     Alias.email.ilike(f"%{query}%"),
+                    Alias.note.ilike(f"%{query}%"),
                     # can't use match() here as it uses to_tsquery that expected a tsquery input
                     # Alias.ts_vector.match(query),
-                    Alias.ts_vector.op("@@")(func.plainto_tsquery(query)),
+                    Alias.ts_vector.op("@@")(func.plainto_tsquery("english", query)),
                     Alias.name.ilike(f"%{query}%"),
                     Mailbox.email.ilike(f"%{query}%"),
                 )
